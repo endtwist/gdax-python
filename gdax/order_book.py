@@ -13,13 +13,18 @@ from gdax.websocket_client import WebsocketClient
 
 
 class OrderBook(WebsocketClient):
-    def __init__(self, product_id='BTC-USD', log_to=None):
-        super(OrderBook, self).__init__(products=product_id)
+    def __init__(self, product_id='BTC-USD', log_to=None, autoreconnect=True, max_retries=3):
+        super(OrderBook, self).__init__(products=[product_id])
+
+        self.channels = ['full']
+
         self._asks = RBTree()
         self._bids = RBTree()
         self._client = PublicClient()
         self._sequence = -1
         self._log_to = log_to
+        self._retries = 0
+        self._max_retries = max_retries
         if self._log_to:
             assert hasattr(self._log_to, 'write')
         self._current_ticker = None
@@ -29,8 +34,12 @@ class OrderBook(WebsocketClient):
         ''' Currently OrderBook only supports a single product even though it is stored as a list of products. '''
         return self.products[0]
 
+    def is_initializing(self):
+        return self._sequence == -1
+
     def on_open(self):
         self._sequence = -1
+        self._retries = 0
         print("-- Subscribed to OrderBook! --\n")
 
     def on_close(self):
@@ -54,14 +63,19 @@ class OrderBook(WebsocketClient):
                 'price': Decimal(ask[0]),
                 'size': Decimal(ask[1])
             })
+        print("\n-- OrderBook Data Initialized --")
         self._sequence = res['sequence']
 
     def on_message(self, message):
         if self._log_to:
             pickle.dump(message, self._log_to)
 
+        if 'sequence' not in message:
+            return
+
         sequence = message['sequence']
         if self._sequence == -1:
+            print("\n-- Initializing OrderBook --")
             self.reset_book()
             return
         if sequence <= self._sequence:
@@ -72,6 +86,7 @@ class OrderBook(WebsocketClient):
             return
 
         msg_type = message['type']
+
         if msg_type == 'open':
             self.add(message)
         elif msg_type == 'done' and 'price' in message:
@@ -83,6 +98,17 @@ class OrderBook(WebsocketClient):
             self.change(message)
 
         self._sequence = sequence
+
+    def on_error(self, ws, e):
+            super(OrderBook, self).on_error(ws, e)
+
+            if self._retries < self._max_retries:
+                print('-- OrderBook Disconnected, reconnecting... --')
+                self._retries += 1
+                self.start()
+            else:
+                print('-- Could not reconnect, stopping... --')
+                self._sequence = -1
 
     def on_sequence_gap(self, gap_start, gap_end):
         self.reset_book()
