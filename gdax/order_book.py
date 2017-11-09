@@ -102,15 +102,18 @@ class OrderBook(WebsocketClient):
     def on_error(self, ws, e):
             super(OrderBook, self).on_error(ws, e)
 
-            if self._retries < self._max_retries:
-                print('-- OrderBook Disconnected, reconnecting... --')
-                self._retries += 1
-                self.start()
-            else:
-                print('-- Could not reconnect, stopping... --')
+            if not ws.sock or not ws.sock.connected:
                 self._sequence = -1
 
+                if self._retries < self._max_retries:
+                    print('-- OrderBook Disconnected, reconnecting... --')
+                    self._retries += 1
+                    self.start()
+                else:
+                    print('-- Could not reconnect, stopping... --')
+
     def on_sequence_gap(self, gap_start, gap_end):
+        self._sequence = -1
         self.reset_book()
         print('Error: messages missing ({} - {}). Re-initializing  book at sequence.'.format(
             gap_start, gap_end, self._sequence))
