@@ -25,6 +25,7 @@ class OrderBook(WebsocketClient):
         self._log_to = log_to
         self._retries = 0
         self._max_retries = max_retries
+        self._autoreconnect = autoreconnect
         if self._log_to:
             assert hasattr(self._log_to, 'write')
         self._current_ticker = None
@@ -44,6 +45,15 @@ class OrderBook(WebsocketClient):
 
     def on_close(self):
         print("\n-- OrderBook Socket Closed! --")
+        if not self.ws.sock or not self.ws.sock.connected and self._autoreconnect:
+            self._sequence = -1
+
+            if self._retries < self._max_retries:
+                print('-- OrderBook Reconnecting... --')
+                self._retries += 1
+                self.start()
+            else:
+                print('-- Could not reconnect, stopping... --')
 
     def reset_book(self):
         self._asks = RBTree()
