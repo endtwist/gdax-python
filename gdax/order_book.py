@@ -26,6 +26,7 @@ class OrderBook(WebsocketClient):
         self._retries = 0
         self._max_retries = max_retries
         self._autoreconnect = autoreconnect
+        self._is_ready = False
         if self._log_to:
             assert hasattr(self._log_to, 'write')
         self._current_ticker = None
@@ -35,8 +36,8 @@ class OrderBook(WebsocketClient):
         ''' Currently OrderBook only supports a single product even though it is stored as a list of products. '''
         return self.products[0]
 
-    def is_initializing(self):
-        return self._sequence == -1
+    def is_ready(self):
+        return self._is_ready
 
     def on_open(self):
         self._sequence = -1
@@ -45,6 +46,7 @@ class OrderBook(WebsocketClient):
 
     def on_close(self):
         print("\n-- OrderBook Socket Closed! --")
+        self._is_ready = False
         if not self.ws.sock or not self.ws.sock.connected and self._autoreconnect:
             self._sequence = -1
 
@@ -74,6 +76,7 @@ class OrderBook(WebsocketClient):
                 'size': Decimal(ask[1])
             })
         print("\n-- OrderBook Data Initialized --")
+        self._is_ready = True
         self._sequence = res['sequence']
 
     def on_message(self, message):
@@ -114,6 +117,7 @@ class OrderBook(WebsocketClient):
 
             if not ws.sock or not ws.sock.connected:
                 self._sequence = -1
+                self._is_ready = False
 
                 if self._retries < self._max_retries:
                     print('-- OrderBook Disconnected, reconnecting... --')
