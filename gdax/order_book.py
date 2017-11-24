@@ -58,6 +58,7 @@ class OrderBook(WebsocketClient):
                 print('-- Could not reconnect, stopping... --')
 
     def reset_book(self):
+        self._is_ready = False
         self._asks = RBTree()
         self._bids = RBTree()
         res = self._client.get_product_order_book(product_id=self.product_id, level=3)
@@ -129,7 +130,8 @@ class OrderBook(WebsocketClient):
     def on_sequence_gap(self, gap_start, gap_end):
         self._sequence = -1
         self.reset_book()
-        print('Error: messages missing ({} - {}). Re-initializing  book at sequence.'.format(
+
+        print('-- Error: messages missing, re-initializing book. --'.format(
             gap_start, gap_end, self._sequence))
 
 
